@@ -10,6 +10,7 @@ from keyboards.confirm import (
     confirm_keyboard,
 )
 from services.ai_service import edit_text
+from services.language_service import get_user_language, t
 from services.telegram_service import publish_post
 from states.post_state import PostState
 
@@ -18,99 +19,102 @@ router = Router()
 
 @router.message(Command("new"))
 async def new_post(message: Message, state: FSMContext):
+    language = get_user_language(message.from_user.id if message.from_user else None)
     await state.set_state(PostState.waiting_for_post)
-    await message.answer(
-        "📷 Отправьте фото товара с подписью или просто текст для публикации.\n\n"
-        "После этого я улучшу текст с помощью AI и покажу предпросмотр."
-    )
+    await message.answer(t("new_prompt", language))
 
 
 @router.message(Command("cancel"))
 async def cancel_post(message: Message, state: FSMContext):
+    language = get_user_language(message.from_user.id if message.from_user else None)
     await state.clear()
-    await message.answer("Ок, публикация отменена.")
+    await message.answer(t("cancelled", language))
 
 
 @router.message(Command("test"))
 async def test_publish(message: Message):
+    language = get_user_language(message.from_user.id if message.from_user else None)
     await publish_post(
         message.bot,
         "🚀 Это тестовая публикация из Me Helper.",
     )
-    await message.answer("✅ Сообщение отправлено в канал.")
+    await message.answer(t("test_published", language))
 
 
 @router.message(PostState.waiting_for_post)
 async def receive_post(message: Message, state: FSMContext):
+    language = get_user_language(message.from_user.id if message.from_user else None)
     data = await state.get_data()
     photo_file_id = message.photo[-1].file_id if message.photo else data.get("photo_file_id")
     source_text = (message.caption or message.text or "").strip()
 
     if message.photo and not source_text:
         await state.update_data(photo_file_id=photo_file_id)
-        await message.answer("Фото получено. Теперь отправьте текст для публикации.")
+        await message.answer(t("photo_received_need_text", language))
         return
 
     if not source_text:
-        await message.answer("Добавьте текст к фото или отправьте текст отдельным сообщением.")
+        await message.answer(t("missing_text", language))
         return
 
-    status_message = await message.answer("Редактирую текст с помощью AI...")
+    status_message = await message.answer(t("editing", language))
 
     try:
         edited_text = await edit_text(source_text)
     except Exception as exc:
         edited_text = source_text
         await status_message.answer(
-            f"AI-редактирование сейчас недоступно: {exc}\n\n"
-            "Показываю исходный текст для подтверждения."
+            t("ai_failed", language, error=exc)
         )
 
     await state.update_data(
         photo_file_id=photo_file_id,
         original_text=source_text,
         edited_text=edited_text,
+        language=language,
     )
     await state.set_state(PostState.waiting_for_confirmation)
 
     await status_message.answer(
-        _preview_text(edited_text),
-        reply_markup=confirm_keyboard(),
+        _preview_text(edited_text, language),
+        reply_markup=confirm_keyboard(language),
     )
 
 
 @router.callback_query(PostState.waiting_for_confirmation, F.data == EDIT_AGAIN_CALLBACK)
 async def edit_again(callback: CallbackQuery, state: FSMContext):
     data = await state.get_data()
+    language = data.get("language") or get_user_language(callback.from_user.id if callback.from_user else None)
     text = data.get("edited_text") or data.get("original_text")
 
     if not text:
-        await callback.answer("Текст не найден. Начните заново через /new.", show_alert=True)
+        await callback.answer(t("text_missing", language), show_alert=True)
         await state.clear()
         return
 
-    await callback.answer("Ещё раз улучшаю текст...")
+    await callback.answer(t("edit_again_answer", language))
 
     try:
         edited_text = await edit_text(text)
     except Exception as exc:
-        await callback.message.answer(f"Не удалось повторно улучшить текст: {exc}")
+        await callback.message.answer(t("edit_again_failed", language, error=exc))
         return
 
     await state.update_data(edited_text=edited_text)
     await callback.message.edit_text(
-        _preview_text(edited_text),
-        reply_markup=confirm_keyboard(),
+        _preview_text(edited_text, language),
+        reply_markup=confirm_keyboard(language),
     )
 
 
 @router.callback_query(PostState.waiting_for_confirmation, F.data == PUBLISH_CALLBACK)
 async def publish_confirmed(callback: CallbackQuery, state: FSMContext):
     data = await state.get_data()
+    language = data.get("language") or get_user_language(callback.from_user.id if callback.from_user else None)
     edited_text = data.get("edited_text")
 
     if not edited_text:
-        await callback.answer("Текст не найден. Начните заново через /new.", show_alert=True)
+        await callback.answer(t("text_missing", language), show_alert=True)
         await state.clear()
         return
 
@@ -121,24 +125,25 @@ async def publish_confirmed(callback: CallbackQuery, state: FSMContext):
             photo_file_id=data.get("photo_file_id"),
         )
     except Exception as exc:
-        await callback.answer("Не удалось опубликовать пост.", show_alert=True)
+        await callback.answer(t("publish_failed_alert", language), show_alert=True)
         await callback.message.answer(str(exc))
         return
 
     await state.clear()
     await callback.message.edit_reply_markup(reply_markup=None)
-    await callback.message.answer("✅ Пост опубликован в канал.")
+    await callback.message.answer(t("published", language))
     await callback.answer()
 
 
 @router.callback_query(PostState.waiting_for_confirmation, F.data == CANCEL_CALLBACK)
 async def cancel_confirmed(callback: CallbackQuery, state: FSMContext):
+    language = get_user_language(callback.from_user.id if callback.from_user else None)
     await state.clear()
     await callback.message.edit_reply_markup(reply_markup=None)
-    await callback.message.answer("Публикация отменена.")
+    await callback.message.answer(t("publication_cancelled", language))
     await callback.answer()
 
 
-def _preview_text(text: str) -> str:
+def _preview_text(text: str, language: str) -> str:
     preview = text if len(text) <= 3500 else f"{text[:3500]}..."
-    return f"Предпросмотр публикации:\n\n{preview}"
+    return t("preview", language, text=preview)

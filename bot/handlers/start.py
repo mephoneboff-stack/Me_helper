@@ -2,13 +2,16 @@ from aiogram import Router
 from aiogram.filters import CommandStart
 from aiogram.types import Message
 
+from keyboards.language import language_keyboard
+from services.language_service import get_user_language, t
+
 router = Router()
 
 
 @router.message(CommandStart())
 async def start(message: Message):
+    language = get_user_language(message.from_user.id if message.from_user else None)
     await message.answer(
-        "👋 Добро пожаловать в Me Helper!\n\n"
-        "Отправьте /new, затем пришлите фото товара с подписью или просто текст.\n"
-        "Я улучшу текст, покажу результат и опубликую его только после подтверждения."
+        t("start", language),
+        reply_markup=language_keyboard(language),
     )
