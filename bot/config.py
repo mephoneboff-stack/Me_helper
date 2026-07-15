@@ -26,3 +26,8 @@ else:
     DEFAULT_OPENAI_MODEL = "gpt-4o-mini"
 
 OPENAI_MODEL = os.getenv("OPENAI_MODEL", DEFAULT_OPENAI_MODEL)
+
+DATA_DIR = BASE_DIR / "data"
+REPOST_DATA_FILE = DATA_DIR / "reposts.json"
+
+SCHEDULER_TICK_SECONDS = int(os.getenv("SCHEDULER_TICK_SECONDS", "60"))

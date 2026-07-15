@@ -104,6 +104,38 @@ MESSAGES = {
         "ru": "❌ Отмена",
         "uz": "❌ Bekor qilish",
     },
+    "repost_prompt": {
+        "ru": "🔁 Настроить автоповтор этого поста?",
+        "uz": "🔁 Ushbu e'lonni avtomatik takrorlashni sozlash?",
+    },
+    "repost_off": {
+        "ru": "Автоповтор выключен.",
+        "uz": "Avtomatik takrorlash o'chirildi.",
+    },
+    "repost_set": {
+        "ru": "Автоповтор включён: каждые {hours} ч.",
+        "uz": "Avtomatik takrorlash yoqildi: har {hours} soatda.",
+    },
+    "repost_missing": {
+        "ru": "Пост не найден. Возможно, время настройки истекло.",
+        "uz": "E'lon topilmadi. Sozlash vaqti tugagan bo'lishi mumkin.",
+    },
+    "button_repost_off": {
+        "ru": "Выключить",
+        "uz": "O'chirish",
+    },
+    "button_repost_6h": {
+        "ru": "6 ч",
+        "uz": "6 soat",
+    },
+    "button_repost_12h": {
+        "ru": "12 ч",
+        "uz": "12 soat",
+    },
+    "button_repost_24h": {
+        "ru": "24 ч",
+        "uz": "24 soat",
+    },
 }
 
 
