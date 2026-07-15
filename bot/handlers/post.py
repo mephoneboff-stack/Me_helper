@@ -163,33 +163,86 @@ async def set_repost(callback: CallbackQuery):
     language = get_user_language(callback.from_user.id)
 
     payload = callback.data.removeprefix(REPOST_CALLBACK_PREFIX)
+    # Формат: {post_id}:day:{0-6} | {post_id}:hour:{H} | {post_id}:save | {post_id}:off
     try:
-        post_id, value = payload.split(":", 1)
+        post_id, action, *rest = payload.split(":")
     except ValueError:
         await callback.answer()
         return
 
-    from services.repost_store import get as get_repost, set_interval
+    from keyboards.repost import repost_keyboard
+    from services.repost_store import (
+        disable as disable_repost,
+        get as get_repost,
+        set_schedule,
+    )
+    from services.tg_helpers import safe_edit_text
 
     post = await get_repost(post_id)
     if not post:
         await callback.answer(t("repost_missing", language), show_alert=True)
         return
 
-    hours: int | None = None if value == "off" else int(value)
-    updated = await set_interval(post_id, hours)
-    selected = hours if updated and updated.get("enabled") else None
+    # Текущий выбор из записи (независимо от того, сохранён ли он уже)
+    days = set(post.get("schedule_days") or [])
+    hours = set(post.get("schedule_hours") or [])
 
-    message_key = "repost_off" if hours is None else "repost_set"
-    alert_kwargs = {} if hours is None else {"hours": hours}
-    from services.tg_helpers import safe_edit_text
+    if action == "day":
+        day = int(rest[0])
+        days = days ^ {day}  # toggle
+        await set_schedule(post_id, list(days), list(hours))
+        await safe_edit_text(
+            callback.message,
+            t("repost_prompt", language),
+            reply_markup=repost_keyboard(post_id, language, list(days), list(hours)),
+        )
+    elif action == "hour":
+        hour = int(rest[0])
+        hours = hours ^ {hour}  # toggle
+        await set_schedule(post_id, list(days), list(hours))
+        await safe_edit_text(
+            callback.message,
+            t("repost_prompt", language),
+            reply_markup=repost_keyboard(post_id, language, list(days), list(hours)),
+        )
+    elif action == "save":
+        if not days or not hours:
+            await callback.answer(t("repost_need_day_hour", language), show_alert=True)
+            return
+        await safe_edit_text(
+            callback.message,
+            t(
+                "repost_saved",
+                language,
+                days=_format_days(days, language),
+                hours=_format_hours(hours, language),
+            ),
+            reply_markup=repost_keyboard(post_id, language, list(days), list(hours)),
+        )
+    elif action == "off":
+        await disable_repost(post_id)
+        await safe_edit_text(
+            callback.message,
+            t("repost_off", language),
+            reply_markup=repost_keyboard(post_id, language, [], []),
+        )
+    else:
+        await callback.answer()
+        return
 
-    await safe_edit_text(
-        callback.message,
-        t(message_key, language, **alert_kwargs),
-        reply_markup=repost_keyboard(post_id, language, selected_hours=selected),
-    )
     await callback.answer()
+
+
+def _format_days(days: set[int], language: str) -> str:
+    _day_keys = {
+        0: "day_mon", 1: "day_tue", 2: "day_wed",
+        3: "day_thu", 4: "day_fri", 5: "day_sat", 6: "day_sun",
+    }
+    return ", ".join(t(_day_keys[d], language) for d in sorted(days) if d in _day_keys)
+
+
+def _format_hours(hours: set[int], language: str) -> str:
+    return ", ".join(f"{h:02d}:00" for h in sorted(hours))
 
 
 def _preview_text(text: str, language: str) -> str:

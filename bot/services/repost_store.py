@@ -2,9 +2,9 @@ import asyncio
 import json
 import logging
 import secrets
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone, timedelta
 
-from config import REPOST_DATA_FILE
+from config import REPOST_DATA_FILE, TZ_TASHKENT
 
 logger = logging.getLogger(__name__)
 
@@ -12,11 +12,13 @@ _lock = asyncio.Lock()
 _posts: list[dict] = []
 _loaded = False
 
-INTERVAL_CHOICES = (6, 12, 24)
 
-
-def _now() -> datetime:
+def _now_utc() -> datetime:
     return datetime.now(timezone.utc)
+
+
+def _now_tashkent() -> datetime:
+    return datetime.now(TZ_TASHKENT)
 
 
 def _parse_dt(value: str) -> datetime:
@@ -41,12 +43,30 @@ def load() -> None:
         raw = REPOST_DATA_FILE.read_text(encoding="utf-8")
         data = json.loads(raw)
         if isinstance(data, list):
-            _posts.extend(p for p in data if isinstance(p, dict))
+            for p in data:
+                if not isinstance(p, dict):
+                    continue
+                _migrate(p)
+                _posts.append(p)
         logger.info("Загружено постов для автоповтора: %d", len(_posts))
     except FileNotFoundError:
         pass
     except Exception as exc:
         logger.warning("Не удалось прочитать %s: %s", REPOST_DATA_FILE, exc)
+
+
+def _migrate(post: dict) -> None:
+    """Обратная совместимость со старыми записями (interval_hours → schedule)."""
+    if "schedule_days" not in post:
+        if post.get("interval_hours"):
+            post["schedule_days"] = [0, 1, 2, 3, 4, 5]
+            post["schedule_hours"] = list(range(0, 24, post["interval_hours"]))
+        else:
+            post["schedule_days"] = []
+            post["schedule_hours"] = []
+        post.pop("interval_hours", None)
+        post.pop("next_run_at", None)
+    post.setdefault("last_run_at", None)
 
 
 async def _save() -> None:
@@ -57,22 +77,17 @@ async def _save() -> None:
     )
 
 
-async def add(
-    text: str,
-    photo_file_id: str | None,
-    interval_hours: int | None = None,
-    enabled: bool = False,
-) -> dict:
-    """Создаёт запись. Без interval_hours — «висящий» пост, ждёт выбора интервала."""
+async def add(text: str, photo_file_id: str | None) -> dict:
+    """Создаёт запись без расписания — ждёт выбора дней/часов."""
     async with _lock:
-        now = _now()
+        now = _now_utc()
         post = {
             "id": _new_id(),
             "text": text,
             "photo_file_id": photo_file_id,
-            "interval_hours": interval_hours,
-            "next_run_at": _iso(now + timedelta(hours=interval_hours)) if interval_hours else _iso(now),
-            "enabled": enabled,
+            "schedule_days": [],
+            "schedule_hours": [],
+            "last_run_at": None,
             "created_at": _iso(now),
         }
         _posts.append(post)
@@ -80,18 +95,29 @@ async def add(
         return post
 
 
-async def set_interval(post_id: str, interval_hours: int | None) -> dict | None:
-    """interval_hours=None → выключить повтор; иначе задать новый интервал."""
+async def set_schedule(
+    post_id: str, days: list[int], hours: list[int]
+) -> dict | None:
+    """Сохраняет выбранное расписание. Пустые days/hours → выключено."""
     async with _lock:
         for post in _posts:
             if post["id"] != post_id:
                 continue
-            if interval_hours is None:
-                post["enabled"] = False
-            else:
-                post["interval_hours"] = interval_hours
-                post["enabled"] = True
-                post["next_run_at"] = _iso(_now() + timedelta(hours=interval_hours))
+            post["schedule_days"] = sorted(set(days))
+            post["schedule_hours"] = sorted(set(hours))
+            await _save()
+            return post
+    return None
+
+
+async def disable(post_id: str) -> dict | None:
+    """Выключает повтор, очищая расписание."""
+    async with _lock:
+        for post in _posts:
+            if post["id"] != post_id:
+                continue
+            post["schedule_days"] = []
+            post["schedule_hours"] = []
             await _save()
             return post
     return None
@@ -115,20 +141,35 @@ async def get(post_id: str) -> dict | None:
     return None
 
 
-async def get_due(now: datetime | None = None) -> list[dict]:
-    moment = now or _now()
+def _is_due(post: dict, now_tk: datetime) -> bool:
+    days = post.get("schedule_days") or []
+    hours = post.get("schedule_hours") or []
+    if not days or not hours:
+        return False
+    if now_tk.weekday() not in days:
+        return False
+    if now_tk.hour not in hours:
+        return False
+    # Защита от дублирования в течение одного часа
+    last = post.get("last_run_at")
+    if last:
+        last_dt = _parse_dt(last).astimezone(TZ_TASHKENT)
+        if last_dt.date() == now_tk.date() and last_dt.hour == now_tk.hour:
+            return False
+    return True
+
+
+async def get_due(now_tk: datetime | None = None) -> list[dict]:
+    moment = now_tk or _now_tashkent()
     async with _lock:
-        return [
-            dict(post)
-            for post in _posts
-            if post.get("enabled") and _parse_dt(post["next_run_at"]) <= moment
-        ]
+        return [dict(p) for p in _posts if _is_due(p, moment)]
 
 
-async def schedule_next(post_id: str) -> None:
+async def mark_run(post_id: str) -> None:
+    """Отмечает, что пост опубликован в текущий час (защита от дублей)."""
     async with _lock:
         for post in _posts:
             if post["id"] == post_id:
-                post["next_run_at"] = _iso(_now() + timedelta(hours=post["interval_hours"]))
+                post["last_run_at"] = _iso(_now_utc())
                 await _save()
                 return

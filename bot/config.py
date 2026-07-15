@@ -1,4 +1,5 @@
 import os
+from datetime import timezone, timedelta
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -31,3 +32,15 @@ DATA_DIR = BASE_DIR / "data"
 REPOST_DATA_FILE = DATA_DIR / "reposts.json"
 
 SCHEDULER_TICK_SECONDS = int(os.getenv("SCHEDULER_TICK_SECONDS", "60"))
+
+# Часовой пояс Ташкента (UTC+5) — для расписания публикаций
+TZ_TASHKENT = timezone(timedelta(hours=5))
+
+# Доступные дни недели (0=Пн … 6=Вс)
+SCHEDULE_AVAILABLE_DAYS = (0, 1, 2, 3, 4, 5)
+
+# Доступные часы публикации (по Ташкенту)
+SCHEDULE_AVAILABLE_HOURS = (10, 12, 14, 16, 18)
+
+# 11:00 Ташкент (UTC+5) = 06:00 UTC
+REPOST_DEFAULT_TIME_UTC = os.getenv("REPOST_DEFAULT_TIME_UTC", "06:00")

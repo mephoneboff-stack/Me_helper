@@ -105,37 +105,45 @@ MESSAGES = {
         "uz": "❌ Bekor qilish",
     },
     "repost_prompt": {
-        "ru": "🔁 Настроить автоповтор этого поста?",
-        "uz": "🔁 Ushbu e'lonni avtomatik takrorlashni sozlash?",
+        "ru": "🔁 Выберите дни и время для автоповтора этого поста (по Ташкенту):",
+        "uz": "🔁 Ushbu e'lonni avtomatik takrorlash uchun kun va vaqt tanlang (Toshkent):",
     },
     "repost_off": {
         "ru": "Автоповтор выключен.",
         "uz": "Avtomatik takrorlash o'chirildi.",
     },
-    "repost_set": {
-        "ru": "Автоповтор включён: каждые {hours} ч.",
-        "uz": "Avtomatik takrorlash yoqildi: har {hours} soatda.",
+    "repost_saved": {
+        "ru": "✅ Расписание сохранено:\nДни: {days}\nВремя: {hours} (Ташкент).",
+        "uz": "✅ Jadval saqlandi:\nKunlar: {days}\nVaqt: {hours} (Toshkent).",
     },
     "repost_missing": {
         "ru": "Пост не найден. Возможно, время настройки истекло.",
         "uz": "E'lon topilmadi. Sozlash vaqti tugagan bo'lishi mumkin.",
     },
+    "repost_need_day_hour": {
+        "ru": "Выберите хотя бы один день и одно время.",
+        "uz": "Kamida bitta kun va bitta vaqt tanlang.",
+    },
+    "button_repost_save": {
+        "ru": "✅ Сохранить",
+        "uz": "✅ Saqlash",
+    },
     "button_repost_off": {
-        "ru": "Выключить",
-        "uz": "O'chirish",
+        "ru": "❌ Выключить",
+        "uz": "❌ O'chirish",
     },
-    "button_repost_6h": {
-        "ru": "6 ч",
-        "uz": "6 soat",
-    },
-    "button_repost_12h": {
-        "ru": "12 ч",
-        "uz": "12 soat",
-    },
-    "button_repost_24h": {
-        "ru": "24 ч",
-        "uz": "24 soat",
-    },
+    "day_mon": {"ru": "Пн", "uz": "Du"},
+    "day_tue": {"ru": "Вт", "uz": "Se"},
+    "day_wed": {"ru": "Ср", "uz": "Ch"},
+    "day_thu": {"ru": "Чт", "uz": "Pa"},
+    "day_fri": {"ru": "Пт", "uz": "Ju"},
+    "day_sat": {"ru": "Сб", "uz": "Sh"},
+    "day_sun": {"ru": "Вс", "uz": "Ya"},
+    "hour_10": {"ru": "10:00", "uz": "10:00"},
+    "hour_12": {"ru": "12:00", "uz": "12:00"},
+    "hour_14": {"ru": "14:00", "uz": "14:00"},
+    "hour_16": {"ru": "16:00", "uz": "16:00"},
+    "hour_18": {"ru": "18:00", "uz": "18:00"},
 }
 
 
