@@ -182,7 +182,10 @@ async def set_repost(callback: CallbackQuery):
 
     message_key = "repost_off" if hours is None else "repost_set"
     alert_kwargs = {} if hours is None else {"hours": hours}
-    await callback.message.edit_text(
+    from services.tg_helpers import safe_edit_text
+
+    await safe_edit_text(
+        callback.message,
         t(message_key, language, **alert_kwargs),
         reply_markup=repost_keyboard(post_id, language, selected_hours=selected),
     )

@@ -4,6 +4,7 @@ from aiogram.types import CallbackQuery, Message
 
 from keyboards.language import LANGUAGE_CALLBACK_PREFIX, language_keyboard
 from services.language_service import get_user_language, set_user_language, t
+from services.tg_helpers import safe_edit_text
 
 router = Router()
 
@@ -27,7 +28,8 @@ async def set_language(callback: CallbackQuery):
     language = set_user_language(callback.from_user.id, language)
     message_key = "language_ru_selected" if language == "ru" else "language_uz_selected"
 
-    await callback.message.edit_text(
+    await safe_edit_text(
+        callback.message,
         t(message_key, language),
         reply_markup=language_keyboard(language),
     )
