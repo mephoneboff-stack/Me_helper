@@ -42,15 +42,32 @@ async def test_publish(message: Message):
     await message.answer(t("test_published", language))
 
 
+def _extract_media(message: Message) -> tuple[str | None, str | None]:
+    """Извлекает (media_type, file_id) из сообщения. Приоритет: photo > video > animation > document."""
+    if message.photo:
+        return "photo", message.photo[-1].file_id
+    if message.video:
+        return "video", message.video.file_id
+    if message.animation:
+        return "animation", message.animation.file_id
+    if message.document:
+        return "document", message.document.file_id
+    return None, None
+
+
 @router.message(PostState.waiting_for_post)
 async def receive_post(message: Message, state: FSMContext):
     language = get_user_language(message.from_user.id if message.from_user else None)
     data = await state.get_data()
-    photo_file_id = message.photo[-1].file_id if message.photo else data.get("photo_file_id")
+    media_type, file_id = _extract_media(message)
+    # Если пришёл только текст, но ранее было вложение — берём из стейта
+    if not media_type:
+        media_type = data.get("media_type")
+        file_id = data.get("file_id")
     source_text = (message.caption or message.text or "").strip()
 
-    if message.photo and not source_text:
-        await state.update_data(photo_file_id=photo_file_id)
+    if media_type and not source_text:
+        await state.update_data(media_type=media_type, file_id=file_id)
         await message.answer(t("photo_received_need_text", language))
         return
 
@@ -69,7 +86,8 @@ async def receive_post(message: Message, state: FSMContext):
         )
 
     await state.update_data(
-        photo_file_id=photo_file_id,
+        media_type=media_type,
+        file_id=file_id,
         original_text=source_text,
         edited_text=edited_text,
         language=language,
@@ -123,7 +141,8 @@ async def publish_confirmed(callback: CallbackQuery, state: FSMContext):
         await publish_post(
             callback.bot,
             edited_text,
-            photo_file_id=data.get("photo_file_id"),
+            media_type=data.get("media_type"),
+            file_id=data.get("file_id"),
         )
     except Exception as exc:
         await callback.answer(t("publish_failed_alert", language), show_alert=True)
@@ -136,7 +155,7 @@ async def publish_confirmed(callback: CallbackQuery, state: FSMContext):
     from keyboards.repost import repost_keyboard
     from services.repost_store import add as add_repost
 
-    post = await add_repost(edited_text, data.get("photo_file_id"))
+    post = await add_repost(edited_text, data.get("file_id"), media_type=data.get("media_type"))
     await callback.message.answer(t("published", language))
     await callback.message.answer(
         t("repost_prompt", language),

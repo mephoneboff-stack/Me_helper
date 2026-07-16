@@ -32,7 +32,8 @@ async def run_scheduler(bot: Bot) -> None:
                     await publish_post(
                         bot,
                         post["text"],
-                        photo_file_id=post.get("photo_file_id"),
+                        media_type=post.get("media_type"),
+                        file_id=post.get("file_id"),
                     )
                     await store.mark_run(post_id)
                     logger.info(

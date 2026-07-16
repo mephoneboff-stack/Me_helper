@@ -40,26 +40,72 @@ async def check_telegram_connection(bot: Bot):
         ) from exc
 
 
-async def publish_post(bot: Bot, text: str, photo_file_id: str | None = None) -> None:
+_SEND_METHODS = {
+    "photo": "send_photo",
+    "video": "send_video",
+    "animation": "send_animation",
+    "document": "send_document",
+}
+
+_MEDIA_CAPTION_LIMITS = {
+    "photo": MAX_PHOTO_CAPTION_LENGTH,
+    "video": MAX_PHOTO_CAPTION_LENGTH,
+    "animation": MAX_PHOTO_CAPTION_LENGTH,
+    "document": MAX_PHOTO_CAPTION_LENGTH,
+}
+
+
+async def publish_post(
+    bot: Bot,
+    text: str,
+    media_type: str | None = None,
+    file_id: str | None = None,
+) -> None:
     clean_text = text.strip()
     if not clean_text:
         raise ValueError("Нельзя опубликовать пустой текст")
 
+    if not media_type or not file_id:
+        # Без вложения — просто текст
+        try:
+            for chunk in _split_text(clean_text):
+                await bot.send_message(chat_id=CHANNEL_ID, text=chunk)
+        except TelegramAPIError as exc:
+            raise RuntimeError(
+                "Не удалось опубликовать пост в канал. Проверьте CHANNEL_ID и права бота."
+            ) from exc
+        return
+
+    method_name = _SEND_METHODS.get(media_type)
+    if not method_name:
+        # Неизвестный тип — отправляем как документ
+        method_name = "send_document"
+
+    caption_limit = _MEDIA_CAPTION_LIMITS.get(media_type, MAX_PHOTO_CAPTION_LENGTH)
+    send_method = getattr(bot, method_name)
+
     try:
-        if photo_file_id and len(clean_text) <= MAX_PHOTO_CAPTION_LENGTH:
-            await bot.send_photo(
+        if len(clean_text) <= caption_limit:
+            await send_method(
                 chat_id=CHANNEL_ID,
-                photo=photo_file_id,
+                **{_media_field(media_type): file_id},
                 caption=clean_text,
             )
             return
 
-        if photo_file_id:
-            await bot.send_photo(chat_id=CHANNEL_ID, photo=photo_file_id)
-
+        # Текст длиннее лимита подписи — отправляем вложение отдельно, текст сообщениями
+        await send_method(
+            chat_id=CHANNEL_ID,
+            **{_media_field(media_type): file_id},
+        )
         for chunk in _split_text(clean_text):
             await bot.send_message(chat_id=CHANNEL_ID, text=chunk)
     except TelegramAPIError as exc:
         raise RuntimeError(
             "Не удалось опубликовать пост в канал. Проверьте CHANNEL_ID и права бота в канале."
         ) from exc
+
+
+def _media_field(media_type: str) -> str:
+    """Возвращает имя параметра для метода send_* (photo/video/animation/document)."""
+    return media_type if media_type != "animation" else "animation"

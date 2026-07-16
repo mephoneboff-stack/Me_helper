@@ -56,7 +56,7 @@ def load() -> None:
 
 
 def _migrate(post: dict) -> None:
-    """Обратная совместимость со старыми записями (interval_hours → schedule)."""
+    """Обратная совместимость со старыми записями."""
     if "schedule_days" not in post:
         if post.get("interval_hours"):
             post["schedule_days"] = [0, 1, 2, 3, 4, 5]
@@ -64,6 +64,13 @@ def _migrate(post: dict) -> None:
         else:
             post["schedule_days"] = []
             post["schedule_hours"] = []
+        post.pop("interval_hours", None)
+        post.pop("next_run_at", None)
+    post.setdefault("last_run_at", None)
+    # Миграция photo_file_id → media_type + file_id
+    if "photo_file_id" in post and "media_type" not in post:
+        post["media_type"] = "photo"
+        post["file_id"] = post.pop("photo_file_id")
         post.pop("interval_hours", None)
         post.pop("next_run_at", None)
     post.setdefault("last_run_at", None)
@@ -77,14 +84,19 @@ async def _save() -> None:
     )
 
 
-async def add(text: str, photo_file_id: str | None) -> dict:
+async def add(
+    text: str,
+    file_id: str | None = None,
+    media_type: str | None = None,
+) -> dict:
     """Создаёт запись без расписания — ждёт выбора дней/часов."""
     async with _lock:
         now = _now_utc()
         post = {
             "id": _new_id(),
             "text": text,
-            "photo_file_id": photo_file_id,
+            "media_type": media_type,
+            "file_id": file_id,
             "schedule_days": [],
             "schedule_hours": [],
             "last_run_at": None,
